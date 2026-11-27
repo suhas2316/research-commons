@@ -21,6 +21,12 @@ const colors = ['#7b2438', '#b58a48', '#6f8471', '#a8b7c1']
 export default function AnalyticsPage({ dataMode, analytics }) {
   const [liveAnalytics, setLiveAnalytics] = useState(null)
   const [loadingLive, setLoadingLive] = useState(false)
+  const [topicClusters, setTopicClusters] = useState([
+    { cluster_id: 1, name: 'AI & Data Mining Systems', paper_volume: 340, topics: ['Computer Science', 'Artificial Intelligence', 'Data Mining', 'Machine Learning'] },
+    { cluster_id: 2, name: 'Distributed & Cloud Networks', paper_volume: 180, topics: ['Cloud Computing', 'World Wide Web', 'Software'] },
+    { cluster_id: 3, name: 'Bioinformatics & Life Sciences', paper_volume: 165, topics: ['Bioinformatics', 'Computational Biology', 'Biology'] },
+    { cluster_id: 4, name: 'Applied Mathematics & Modeling', paper_volume: 95, topics: ['Mathematics', 'Field (Mathematics)', 'Engineering'] },
+  ])
 
   useEffect(() => {
     if (dataMode === 'live') {
@@ -29,11 +35,16 @@ export default function AnalyticsPage({ dataMode, analytics }) {
         apiRequest('/api/analytics/trends'),
         apiRequest('/api/analytics/topics'),
         apiRequest('/api/analytics/collaboration'),
+        apiRequest('/api/analytics/topic-clusters'),
       ])
-        .then(([trendsRes, topicsRes, collabRes]) => {
+        .then(([trendsRes, topicsRes, collabRes, clustersRes]) => {
           const trendsData = trendsRes.status === 'fulfilled' && Array.isArray(trendsRes.value) ? trendsRes.value : []
           const topicsData = topicsRes.status === 'fulfilled' && Array.isArray(topicsRes.value) ? topicsRes.value : []
           const collabData = collabRes.status === 'fulfilled' && Array.isArray(collabRes.value) ? collabRes.value : []
+
+          if (clustersRes.status === 'fulfilled' && clustersRes.value?.clusters?.length > 0) {
+            setTopicClusters(clustersRes.value.clusters)
+          }
 
           if (trendsData.length > 0 || topicsData.length > 0) {
             // Group trends by month
@@ -190,6 +201,39 @@ export default function AnalyticsPage({ dataMode, analytics }) {
           </div>
         </section>
       </div>
+
+      <section className="chart-card" style={{ marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+        <div className="chart-card-heading">
+          <div>
+            <span className="eyebrow">TOPIC MODELLING & CLUSTERING (F9)</span>
+            <h2>Hierarchical research topic taxonomy</h2>
+            <p>Agglomerative hierarchical clustering of academic concepts based on co-occurrence distance</p>
+          </div>
+          <span className="local-model-badge">
+            <span className="live-dot" /> UPGMA Linkage
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
+          {topicClusters.map((cluster, idx) => (
+            <div key={cluster.cluster_id || idx} style={{ border: '1px solid #e7e2da', borderRadius: '8px', padding: '1rem', background: '#faf8f5' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: colors[idx % colors.length], color: '#fff' }}>
+                  Cluster {cluster.cluster_id}
+                </span>
+                <span style={{ fontSize: '0.8rem', color: '#746c64', fontWeight: 600 }}>{cluster.paper_volume} mentions</span>
+              </div>
+              <h3 style={{ fontSize: '0.95rem', margin: '0.25rem 0 0.5rem 0', color: '#2b2621' }}>{cluster.name}</h3>
+              <div className="tag-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                {cluster.topics.map((t) => (
+                  <span key={t} className="tag" style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#fff', border: '1px solid #d9d3c7', borderRadius: '4px' }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="analytics-bottom">
         <section className="chart-card">

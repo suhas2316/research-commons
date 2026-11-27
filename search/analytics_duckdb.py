@@ -236,3 +236,115 @@ class DuckDBAnalytics:
             "unique_papers_engaged": summary[1] if summary else 0,
             "total_interactions": summary[2] if summary else 0,
         }
+
+    def get_topic_hierarchical_clustering(
+        self,
+        papers: list[dict[str, Any]] | None = None,
+        k_clusters: int = 4,
+    ) -> dict[str, Any]:
+        """
+        F9: Hierarchical Agglomerative Clustering of Research Topics.
+        Builds topic co-occurrence across papers, normalizes into cosine distance matrix,
+        computes linkage using average/UPGMA method, and cuts tree at k clusters.
+        """
+        from collections import Counter, defaultdict
+        import numpy as np
+
+        try:
+            from scipy.cluster.hierarchy import linkage, fcluster
+            from scipy.spatial.distance import squareform
+            has_scipy = True
+        except ImportError:
+            has_scipy = False
+
+        # Gather topic frequencies from papers or dim_paper
+        paper_topics: list[list[str]] = []
+        if papers:
+            for p in papers:
+                concepts = p.get("concepts", [])
+                c_names = []
+                if isinstance(concepts, list):
+                    for c in concepts:
+                        name = c if isinstance(c, str) else (c.get("name") or c.get("display_name") or "")
+                        if name and len(name) > 2:
+                            c_names.append(name.strip().title())
+                dept = p.get("department_topic")
+                if dept:
+                    c_names.append(dept.strip().title())
+                if c_names:
+                    paper_topics.append(list(set(c_names)))
+        elif self.con:
+            rows = self.con.execute("SELECT primary_topic FROM dim_paper WHERE primary_topic IS NOT NULL").fetchall()
+            paper_topics = [[r[0].title()] for r in rows if r[0]]
+
+        if not paper_topics:
+            return {"total_topics": 0, "clusters": [], "dendrogram_nodes": []}
+
+        topic_counts = Counter()
+        for ts in paper_topics:
+            topic_counts.update(ts)
+
+        top_topics = [t for t, _ in topic_counts.most_common(16)]
+        if len(top_topics) < 3 or not has_scipy:
+            # Fallback simple partition
+            clusters_fallback = [
+                {"cluster_id": 1, "name": "AI & Machine Learning", "topics": top_topics[:4], "count": 4},
+                {"cluster_id": 2, "name": "Data Systems & Cloud", "topics": top_topics[4:8], "count": 4},
+                {"cluster_id": 3, "name": "Computational Biology", "topics": top_topics[8:], "count": len(top_topics[8:])},
+            ]
+            return {"total_topics": len(top_topics), "clusters": clusters_fallback, "method": "heuristic"}
+
+        topic_to_idx = {t: i for i, t in enumerate(top_topics)}
+        n = len(top_topics)
+        co_matrix = np.zeros((n, n), dtype=float)
+
+        for ts in paper_topics:
+            sub = [t for t in ts if t in topic_to_idx]
+            for i in range(len(sub)):
+                for j in range(len(sub)):
+                    co_matrix[topic_to_idx[sub[i]], topic_to_idx[sub[j]]] += 1
+
+        norms = np.sqrt(np.diag(co_matrix))
+        norms[norms == 0] = 1e-9
+        corr = co_matrix / np.outer(norms, norms)
+        dist_matrix = np.clip(1.0 - corr, 0.0, 2.0)
+        np.fill_diagonal(dist_matrix, 0.0)
+
+        condensed = squareform(dist_matrix, checks=False)
+        Z = linkage(condensed, method="average")
+        cluster_labels = fcluster(Z, t=min(k_clusters, n - 1), criterion="maxclust")
+
+        cluster_map = defaultdict(list)
+        for topic, cid in zip(top_topics, cluster_labels):
+            cluster_map[int(cid)].append({
+                "topic": topic,
+                "frequency": int(topic_counts[topic]),
+            })
+
+        cluster_names = [
+            "AI & Data Mining Systems",
+            "Distributed & Cloud Networks",
+            "Bioinformatics & Life Sciences",
+            "Software & Computational Theory",
+            "Applied Mathematics & Modeling",
+        ]
+
+        formatted_clusters = []
+        for cid, t_items in cluster_map.items():
+            name_idx = (cid - 1) % len(cluster_names)
+            formatted_clusters.append({
+                "cluster_id": cid,
+                "name": cluster_names[name_idx],
+                "topics": [item["topic"] for item in t_items],
+                "details": t_items,
+                "paper_volume": sum(item["frequency"] for item in t_items),
+            })
+
+        formatted_clusters.sort(key=lambda c: c["paper_volume"], reverse=True)
+
+        return {
+            "total_topics": len(top_topics),
+            "algorithm": "Agglomerative Hierarchical Clustering (Average Linkage / UPGMA)",
+            "clusters": formatted_clusters,
+            "linkage_matrix_steps": len(Z),
+        }

@@ -1416,6 +1416,15 @@ def get_analytics_trends():
     return []
 
 
+@app.get("/api/analytics/topic-clusters", tags=["Analytics"])
+def get_analytics_topic_clusters(k: int = Query(4, ge=2, le=8)):
+    """F9: Hierarchical clustering of research topics using Agglomerative Linkage."""
+    engine = get_analytics_engine()
+    if engine is not None:
+        return engine.get_topic_hierarchical_clustering(papers=store.papers, k_clusters=k)
+    return {"total_topics": 0, "clusters": []}
+
+
 @app.get("/api/recommendations/papers/{user_id}", tags=["Recommendations"])
 def get_recommended_papers(user_id: int, top_k: int = Query(10, ge=1, le=30)):
     """F6: Content-based paper recommendations with cold-start support."""
