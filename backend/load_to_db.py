@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -161,7 +162,7 @@ def load_synthetic(cur: Any) -> None:
             """
             INSERT INTO users (id, name, email, password_hash, role, department, bio, created_at)
             VALUES %s
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             [
                 (
@@ -185,7 +186,7 @@ def load_synthetic(cur: Any) -> None:
             """
             INSERT INTO user_interests (id, user_id, tag)
             VALUES %s
-            ON CONFLICT (user_id, tag) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             [(int(ui["id"]), int(ui["user_id"]), ui["tag"]) for ui in user_interests],
             page_size=500,
@@ -197,7 +198,7 @@ def load_synthetic(cur: Any) -> None:
             """
             INSERT INTO follows (id, follower_id, following_id, created_at)
             VALUES %s
-            ON CONFLICT (follower_id, following_id) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             [
                 (
@@ -217,7 +218,7 @@ def load_synthetic(cur: Any) -> None:
             """
             INSERT INTO library (id, user_id, paper_id, notes, collection_name, created_at)
             VALUES %s
-            ON CONFLICT (user_id, paper_id, collection_name) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             [
                 (
@@ -239,7 +240,7 @@ def load_synthetic(cur: Any) -> None:
             """
             INSERT INTO posts (id, user_id, title, content, tags, attached_paper_id, created_at)
             VALUES %s
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT DO NOTHING
             """,
             [
                 (
@@ -315,10 +316,25 @@ def load_synthetic(cur: Any) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Load Research Commons data into PostgreSQL.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Truncate existing tables before loading fresh JSON data.",
+    )
+    args = parser.parse_args()
+
     print(f"Connecting to PostgreSQL at {DATABASE_URL}...")
     with psycopg2.connect(DATABASE_URL) as conn:
         with conn.cursor() as cur:
             ensure_schema(cur)
+            if args.reset:
+                cur.execute(
+                    "TRUNCATE TABLE activity_events, comments, posts, library, "
+                    "paper_citations, follows, user_interests, papers, users "
+                    "RESTART IDENTITY CASCADE;"
+                )
+                print("Cleared existing tables (--reset).")
             load_papers(cur)
             load_synthetic(cur)
         conn.commit()
