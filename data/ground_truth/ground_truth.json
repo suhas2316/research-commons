@@ -1,0 +1,217 @@
+{
+  "generated_at": "2026-11-25T09:57:34.949865+00:00",
+  "description": "Planted ground truth evaluation cases for MinHash/LSH, Isolation Forest, and Z-score trend detection.",
+  "duplicate_papers": [
+    {
+      "original_paper_id": "W3023540311",
+      "duplicate_paper_id": "W_DUP_001",
+      "original_title": "Genetic algorithms in search, optimization, and machine learning",
+      "duplicate_title": "Genetic algorithms in search, optimization, and machine learning (Preprint)",
+      "mutation_type": "preprint_suffix_and_casing"
+    },
+    {
+      "original_paper_id": "W2962793481",
+      "duplicate_paper_id": "W_DUP_002",
+      "original_title": "Unpaired Image-to-Image Translation Using Cycle-Consistent Adversarial Networks",
+      "duplicate_title": "Unpaired Image to Image Translation Using Cycle Consistent Adversarial Networks",
+      "mutation_type": "conjunction_and_prefix_variant"
+    },
+    {
+      "original_paper_id": "W608171497",
+      "duplicate_paper_id": "W_DUP_003",
+      "original_title": "Systems and Computer Science",
+      "duplicate_title": "Systems and Computer Science: A Survey",
+      "mutation_type": "punctuation_and_subtitle_variant"
+    },
+    {
+      "original_paper_id": "W2736287575",
+      "duplicate_paper_id": "W_DUP_004",
+      "original_title": "Leakage in data mining: Formulation, detection, and avoidance",
+      "duplicate_title": "Leakage in data mining: Formulation, detection, and avoidance (Preprint)",
+      "mutation_type": "preprint_suffix_and_casing"
+    },
+    {
+      "original_paper_id": "W3201073812",
+      "duplicate_paper_id": "W_DUP_005",
+      "original_title": "LAMMPS - a flexible simulation tool for particle-based materials modeling at the atomic, meso, and continuum scales",
+      "duplicate_title": "LAMMPS   a flexible simulation tool for particle based materials modeling at the atomic, meso, & continuum scales",
+      "mutation_type": "conjunction_and_prefix_variant"
+    },
+    {
+      "original_paper_id": "W1832693441",
+      "duplicate_paper_id": "W_DUP_006",
+      "original_title": "Convolutional Neural Networks for Sentence Classification",
+      "duplicate_title": "Convolutional Neural Networks for Sentence Classification: A Survey",
+      "mutation_type": "punctuation_and_subtitle_variant"
+    },
+    {
+      "original_paper_id": "W2886801379",
+      "duplicate_paper_id": "W_DUP_007",
+      "original_title": "Artificial intelligence in retina",
+      "duplicate_title": "An Empirical Study of Artificial intelligence in retina",
+      "mutation_type": "conjunction_and_prefix_variant"
+    },
+    {
+      "original_paper_id": "W2067404301",
+      "duplicate_paper_id": "W_DUP_008",
+      "original_title": "The qualitative content analysis process",
+      "duplicate_title": "An Empirical Study of The qualitative content analysis process",
+      "mutation_type": "conjunction_and_prefix_variant"
+    },
+    {
+      "original_paper_id": "W2157917411",
+      "duplicate_paper_id": "W_DUP_009",
+      "original_title": "The Sloan Digital Sky Survey: Technical Summary",
+      "duplicate_title": "The Sloan Digital Sky Survey - Technical Summary",
+      "mutation_type": "punctuation_and_subtitle_variant"
+    },
+    {
+      "original_paper_id": "W2041404167",
+      "duplicate_paper_id": "W_DUP_010",
+      "original_title": "A Mathematical Theory of Communication",
+      "duplicate_title": "A Mathematical Theory of communication (Preprint)",
+      "mutation_type": "preprint_suffix_and_casing"
+    }
+  ],
+  "spam_accounts": [
+    {
+      "user_id": 56,
+      "name": "Vikram Malhotra",
+      "email": "vikram.m56@external-mail.org",
+      "department": "Management",
+      "spam_reason": "High-frequency repetitive promotional posts and automated activity bursts",
+      "post_ids": [
+        1921,
+        1922,
+        1923,
+        1924,
+        1925,
+        1926,
+        1927,
+        1928,
+        1929,
+        1930,
+        1931,
+        1932,
+        1933,
+        1934,
+        1935,
+        1936,
+        1937,
+        1938,
+        1939,
+        1940,
+        1941,
+        1942,
+        1943,
+        1944,
+        1945,
+        1946,
+        1947,
+        1948,
+        1949,
+        1950
+      ]
+    },
+    {
+      "user_id": 57,
+      "name": "Riya Kapoor",
+      "email": "riya.k57@external-mail.org",
+      "department": "Computer Science",
+      "spam_reason": "High-frequency repetitive promotional posts and automated activity bursts",
+      "post_ids": [
+        1951,
+        1952,
+        1953,
+        1954,
+        1955,
+        1956,
+        1957,
+        1958,
+        1959,
+        1960,
+        1961,
+        1962,
+        1963,
+        1964,
+        1965,
+        1966,
+        1967,
+        1968,
+        1969,
+        1970,
+        1971,
+        1972,
+        1973,
+        1974,
+        1975,
+        1976,
+        1977,
+        1978,
+        1979,
+        1980
+      ]
+    },
+    {
+      "user_id": 58,
+      "name": "Arjun Verma",
+      "email": "arjun.v58@external-mail.org",
+      "department": "Data Science",
+      "spam_reason": "High-frequency repetitive promotional posts and automated activity bursts",
+      "post_ids": [
+        1981,
+        1982,
+        1983,
+        1984,
+        1985,
+        1986,
+        1987,
+        1988,
+        1989,
+        1990,
+        1991,
+        1992,
+        1993,
+        1994,
+        1995,
+        1996,
+        1997,
+        1998,
+        1999,
+        2000,
+        2001,
+        2002,
+        2003,
+        2004,
+        2005,
+        2006,
+        2007,
+        2008,
+        2009,
+        2010
+      ]
+    }
+  ],
+  "topic_spikes": [
+    {
+      "topic": "quantum machine learning",
+      "spike_week_start": "2026-11-09",
+      "spike_week_end": "2026-11-15",
+      "iso_week": "2026-W46",
+      "baseline_weekly_avg": 1.28,
+      "spike_week_total_mentions": 225,
+      "spike_posts": 45,
+      "spike_searches": 180
+    },
+    {
+      "topic": "agentic rag systems",
+      "spike_week_start": "2026-11-09",
+      "spike_week_end": "2026-11-15",
+      "iso_week": "2026-W46",
+      "baseline_weekly_avg": 1.12,
+      "spike_week_total_mentions": 225,
+      "spike_posts": 45,
+      "spike_searches": 180
+    }
+  ]
+}
