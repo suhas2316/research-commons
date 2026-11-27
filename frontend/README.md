@@ -1,37 +1,54 @@
-# Frontend Module
+# Research Commons frontend
 
-## Module Overview
-This folder contains the client-facing user interface for **Research Commons**.
+The Research Commons frontend is the React + Vite client for the Chanakya University research community. Its visual theme uses deep maroon, antique gold, and warm neutrals.
 
-- **Assigned Team Member:** Poorna
-- **Primary Tech Stack:** React, Vite, Tailwind CSS, Recharts
+## Run locally
 
----
+From the repository root, start the supporting services and API:
 
-## Planned Responsibilities & Features
-1. **User Authentication & Profiles:**
-   - Registration, login, and user profile views.
-   - Department and research interest selection.
-2. **Community & Discussions:**
-   - Feed and posts display.
-   - Commenting and following authors/topics.
-3. **Research Library:**
-   - Paper collections, bookmarking/saving papers, and private notes.
-4. **Search UI:**
-   - Unified search interface covering papers, library items, authors, and posts.
-5. **Research Assistant UI:**
-   - Interactive chat interface displaying grounded answers with citation sources.
-6. **Analytics Dashboard:**
-   - Admin metrics and charts (using Recharts) for trending topics, activity by department, and collaboration.
+```powershell
+docker compose up -d postgres minio
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env
+ollama pull qwen2.5:3b
+uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
 
----
+Install Ollama before pulling the model. Ollama must be running locally at `http://127.0.0.1:11434`; if its background service is not already running, start it with `ollama serve`. The selected model can be changed with `OLLAMA_MODEL` in `backend/.env`.
 
-## Getting Started (Planned)
-When starting development:
-1. Initialize the project using Vite:
-   ```bash
-   npm create vite@latest . -- --template react
-   ```
-2. Install Tailwind CSS and component dependencies.
-3. Keep reusable UI components (buttons, modals, navbar, cards) inside a `src/components/` folder.
-4. Connect frontend pages to the FastAPI backend API endpoints.
+In another terminal, configure and start the frontend:
+
+```powershell
+Set-Location frontend
+Copy-Item .env.example .env
+npm install
+npm run dev
+```
+
+The frontend environment file should set `VITE_API_BASE_URL=http://localhost:8000`. Restart Vite after changing it. If the backend is unavailable, the UI remains usable with clearly marked sample data; the four **Demo** buttons provide one-click Student, Faculty, Researcher, and Admin access.
+
+## Screens
+
+- **Sign in / registration:** connects to the FastAPI login and registration endpoints. Account registration includes role and department.
+- **Community feed:** browses posts, creates posts with tags, and adds comments.
+- **Personal library:** saves papers and edits collection names and private notes.
+- **Unified search:** searches papers, library items, university members, and discussions across the data loaded by the API.
+- **Research assistant:** sends questions and recent conversation turns to the local Ollama model through FastAPI. The backend ranks relevant paper abstracts as context and returns expandable citations. Demo Student and Faculty accounts can use it too; their sample papers are supplied as context. If Ollama is unavailable, the UI reports the error rather than showing a fabricated answer.
+- **Admin analytics:** offline/demo mode displays department activity, six-month trends, and collaboration charts. A live analytics API is not yet available.
+
+The demo/offline records are illustrative and are not saved to the backend. Assistant prompts and selected paper abstracts are sent only to the local Ollama service; no external AI provider is used. In connected mode, search filters records returned by the API; it is not wired to the team's BM25/semantic unified-search endpoint.
+
+## Session and security
+
+After login or registration, the client stores the returned user profile in `localStorage` under `research_commons_user` and restores it on reload. Logging out removes that entry. This is client-side convenience only: browser storage can be edited and must not be treated as authentication or authorization.
+
+The merged backend currently returns a placeholder access token and its data routes do not validate sessions or enforce user-scoped access. Registration also allows selecting Admin. Do not use this implementation as a private or production client portal until the backend provides secure password hashing, validated sessions, role-based authorization, and durable account storage.
+
+## Stack
+
+- React and Vite
+- Tailwind CSS and custom application styles
+- Recharts
+- Lucide React icons
