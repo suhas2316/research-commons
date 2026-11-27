@@ -1,11 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim()
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:8000'
 
 export async function apiRequest(path, options = {}) {
-  if (!API_BASE_URL) {
-    throw new Error('Backend URL is not configured. Set VITE_API_BASE_URL in frontend/.env.')
-  }
-
-  const baseUrl = API_BASE_URL.replace(/\/+$/, '')
+  const baseUrl = (API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '')
   const normalizedPath = path.replace(/^\/+/, '')
   const response = await fetch(new URL(normalizedPath, `${baseUrl}/`), {
     ...options,

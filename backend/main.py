@@ -1219,6 +1219,242 @@ def save_to_library(payload: LibrarySaveRequest) -> dict[str, Any]:
     return {"message": "Paper saved to library", "item": saved_item}
 
 
+# ============================================================
+# SEARCH, RECOMMENDATIONS & DUCKDB ANALYTICS INTEGRATION
+# ============================================================
+
+_search_service = None
+_analytics_engine = None
+_rec_service = None
+
+
+def get_search_service() -> Any:
+    global _search_service
+    if _search_service is None:
+        try:
+            from search.unified_search import UnifiedSearchService
+            service = UnifiedSearchService()
+            service.fit(
+                papers=store.papers,
+                users=store.users,
+                posts=store.posts,
+                library=store.library,
+            )
+            _search_service = service
+        except Exception as e:
+            logger.warning(f"Failed to initialize UnifiedSearchService: {e}")
+            return None
+    return _search_service
+
+
+def get_analytics_engine() -> Any:
+    global _analytics_engine
+    if _analytics_engine is None:
+        try:
+            from search.analytics_duckdb import DuckDBAnalytics
+            engine = DuckDBAnalytics()
+            engine.load_data(
+                papers=store.papers,
+                users=store.users,
+                posts=store.posts,
+                events=store.activity_events,
+            )
+            _analytics_engine = engine
+        except Exception as e:
+            logger.warning(f"Failed to initialize DuckDBAnalytics: {e}")
+            return None
+    return _analytics_engine
+
+
+def get_recommendation_service() -> Any:
+    global _rec_service
+    if _rec_service is None:
+        try:
+            from recommendations.recommendation_service import RecommendationService
+            _rec_service = RecommendationService()
+        except Exception as e:
+            logger.warning(f"Failed to initialize RecommendationService: {e}")
+            return None
+    return _rec_service
+
+
+@app.get("/api/search", tags=["Unified Search"])
+def unified_search(
+    q: str = Query(..., min_length=1, description="Search query string"),
+    limit: int = Query(10, ge=1, le=50, description="Max results per panel"),
+):
+    """
+    F5 Unified 4-in-1 Search returning:
+    - papers: Hybrid BM25 + Semantic Embeddings + PageRank (Deduplicated)
+    - library: University saved items
+    - people: Matching faculty and students
+    - posts: Discussion topics
+    """
+    search_svc = get_search_service()
+    if search_svc is not None:
+        res = search_svc.search(query=q, limit_per_panel=limit)
+        # Log search event
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            store.activity_events.append({
+                "id": store._next_id(store.activity_events),
+                "user_id": 1,
+                "event_type": "search",
+                "target_id": None,
+                "query_text": q,
+                "timestamp": now_iso,
+            })
+        except Exception:
+            pass
+        return res
+
+    # Simple fallback search if search engine loading is deferred
+    q_lower = q.lower()
+    matched_papers = [
+        p for p in store.papers
+        if q_lower in p.get("title", "").lower() or q_lower in p.get("abstract", "").lower()
+    ][:limit]
+    matched_users = [
+        u for u in store.users
+        if q_lower in u.get("name", "").lower() or q_lower in u.get("department", "").lower()
+    ][:limit]
+    matched_posts = [
+        pt for pt in store.posts
+        if q_lower in pt.get("title", "").lower() or q_lower in pt.get("content", "").lower()
+    ][:limit]
+
+    return {
+        "query": q,
+        "total_results": len(matched_papers) + len(matched_users) + len(matched_posts),
+        "panels": {
+            "papers": matched_papers,
+            "library": [],
+            "people": matched_users,
+            "posts": matched_posts,
+        },
+    }
+
+
+@app.get("/api/search/duplicates", tags=["Unified Search"])
+def get_duplicate_clusters():
+    """Returns detected near-duplicate paper clusters using MinHash & LSH."""
+    try:
+        from search.deduplication import DuplicateDetector
+        detector = DuplicateDetector()
+        clusters = detector.find_duplicate_clusters(store.papers)
+        paper_lookup = {p["id"]: p for p in store.papers}
+        formatted = []
+        for c in clusters:
+            formatted.append([
+                {"id": pid, "title": paper_lookup.get(pid, {}).get("title", pid)}
+                for pid in c
+            ])
+        return {"total_clusters": len(formatted), "clusters": formatted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/search/pagerank", tags=["Unified Search"])
+def get_top_pagerank_papers(top_k: int = Query(10, ge=1, le=50)):
+    """Returns top authoritative papers by PageRank score."""
+    try:
+        from search.citation_pagerank import CitationGraphPageRank
+        pr = CitationGraphPageRank().fit(store.papers)
+        return pr.get_top_authoritative_papers(top_k=top_k, papers=store.papers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analytics/topics", tags=["Analytics"])
+def get_analytics_topics():
+    """F9: Active research topics by department."""
+    engine = get_analytics_engine()
+    if engine is not None:
+        return engine.get_research_topics_by_department()
+    return []
+
+
+@app.get("/api/analytics/collaboration", tags=["Analytics"])
+def get_analytics_collaboration():
+    """F9: Inter-department collaboration matrix."""
+    engine = get_analytics_engine()
+    if engine is not None:
+        return engine.get_department_collaboration_matrix()
+    return []
+
+
+@app.get("/api/analytics/top-papers", tags=["Analytics"])
+def get_analytics_top_papers(top_n: int = Query(10, ge=1, le=50)):
+    """F9: Most saved and discussed papers."""
+    engine = get_analytics_engine()
+    if engine is not None:
+        return engine.get_most_saved_and_discussed_papers(top_n=top_n)
+    return []
+
+
+@app.get("/api/analytics/trends", tags=["Analytics"])
+def get_analytics_trends():
+    """F9: Six-month campus interaction trends (views, saves, searches)."""
+    engine = get_analytics_engine()
+    if engine is not None:
+        return engine.get_engagement_trends_over_time()
+    return []
+
+
+@app.get("/api/recommendations/papers/{user_id}", tags=["Recommendations"])
+def get_recommended_papers(user_id: int, top_k: int = Query(10, ge=1, le=30)):
+    """F6: Content-based paper recommendations with cold-start support."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.recommend_papers(user_id=user_id, top_k=top_k)
+    return []
+
+
+@app.get("/api/recommendations/researchers/{user_id}", tags=["Recommendations"])
+def get_recommended_researchers(user_id: int, top_k: int = Query(5, ge=1, le=20)):
+    """F6: Faculty and student collaboration recommendations."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.recommend_colleagues(user_id=user_id, top_k=top_k)
+    return []
+
+
+@app.get("/api/recommendations/co-saved/{paper_id}", tags=["Recommendations"])
+def get_cosaved_recommendations(paper_id: str, top_k: int = Query(5, ge=1, le=20)):
+    """F6: FP-Growth association rules: 'Members who saved this paper also saved...'."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.get_cosaved_recommendations(paper_id=paper_id, top_k=top_k)
+    return []
+
+
+@app.get("/api/trends/hot-topics", tags=["Trends & Monitoring"])
+def get_trending_topics(top_k: int = Query(10, ge=1, le=30)):
+    """F7: Trending topics over the recent time window."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.get_trending_topics(top_k=top_k)
+    return []
+
+
+@app.get("/api/trends/spikes", tags=["Trends & Monitoring"])
+def get_topic_spike_alerts():
+    """F7: Z-score spike alerts when a topic suddenly surges (Z > 2.5)."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.detect_topic_spikes()
+    return []
+
+
+@app.get("/api/trends/spam-alerts", tags=["Trends & Monitoring"])
+def get_spam_alerts():
+    """F7: Isolation Forest anomaly detection flagging abusive or spam accounts."""
+    rec_svc = get_recommendation_service()
+    if rec_svc is not None:
+        return rec_svc.detect_spam_accounts()
+    return []
+
+
 if __name__ == "__main__":
     import uvicorn
 
