@@ -286,7 +286,7 @@ function PaperCard({ paper, saved, onSave, onGetPaperComments, onAddPaperComment
 
 function HomePage({ user, papers, papersTotal, posts, library, peopleTotal, trends, dataMode, onNavigate, onSave, onAddComment, onGetPaperComments, onAddPaperComment }) {
   const savedIds = new Set(library.map((item) => String(item.paper_id || item.id)))
-  const displayTotalPapers = papersTotal || 729
+  const displayTotalPapers = dataMode === 'live' ? (papersTotal || 729) : papers.length
   return (
     <div className="page-content">
       <section className="welcome-banner">
@@ -300,7 +300,7 @@ function HomePage({ user, papers, papersTotal, posts, library, peopleTotal, tren
         <div className="banner-caption">ROOTED IN IDEALS <span>·</span> ASCENDING WITH IDEAS</div>
       </section>
       <div className="quick-stats">
-        <div className="stat-card"><span className="stat-icon burgundy"><BookOpen size={17} /></span><div><span className="stat-label">Total research papers</span><strong>{displayTotalPapers}</strong><small>Harvested from OpenAlex & arXiv</small></div></div>
+        <div className="stat-card"><span className="stat-icon burgundy"><BookOpen size={17} /></span><div><span className="stat-label">Total research papers</span><strong>{displayTotalPapers}</strong><small>{dataMode === 'live' ? 'Harvested from OpenAlex & arXiv' : 'Included in demo preview'}</small></div></div>
         <div className="stat-card"><span className="stat-icon ochre"><Bookmark size={17} /></span><div><span className="stat-label">Papers in your library</span><strong>{library.length}</strong><small>From your saved research</small></div></div>
         <div className="stat-card"><span className="stat-icon sage"><Users size={17} /></span><div><span className="stat-label">Research community</span><strong>{peopleTotal}</strong><small>Registered members</small></div></div>
         <div className="stat-card"><span className="stat-icon blue"><MessageCircle size={17} /></span><div><span className="stat-label">Recent discussions</span><strong>{posts.length}</strong><small>Loaded from community feed</small></div></div>
