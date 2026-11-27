@@ -1,75 +1,75 @@
 {
-  "generated_at": "2026-11-25T10:56:03.693196+00:00",
+  "generated_at": "2026-11-27T06:25:13.212109+00:00",
   "description": "Planted ground truth evaluation cases for MinHash/LSH, Isolation Forest, and Z-score trend detection.",
   "duplicate_papers": [
     {
-      "original_paper_id": "W1483870316",
+      "original_paper_id": "W2965373594",
       "duplicate_paper_id": "W_DUP_001",
-      "original_title": "You Only Look Once: Unified, Real-Time Object Detection",
-      "duplicate_title": "You Only Look Once: Unified, Real-Time Object detection (Preprint)",
+      "original_title": "RoBERTa: A Robustly Optimized BERT Pretraining Approach",
+      "duplicate_title": "RoBERTa: A Robustly Optimized BERT Pretraining approach (Preprint)",
       "mutation_type": "preprint_suffix_and_casing"
     },
     {
-      "original_paper_id": "W1031578623",
+      "original_paper_id": "W2552465644",
       "duplicate_paper_id": "W_DUP_002",
-      "original_title": "GROMACS: High performance molecular simulations through multi-level parallelism from laptops to supercomputers",
-      "duplicate_title": "GROMACS: High performance molecular simulations through multi level parallelism from laptops to supercomputers",
+      "original_title": "Image-to-Image Translation with Conditional Adversarial Networks",
+      "duplicate_title": "Image to Image Translation with Conditional Adversarial Networks",
       "mutation_type": "conjunction_and_prefix_variant"
     },
     {
-      "original_paper_id": "W608171497",
+      "original_paper_id": "W2153915504",
       "duplicate_paper_id": "W_DUP_003",
-      "original_title": "Systems and Computer Science",
-      "duplicate_title": "Systems and Computer Science: A Survey",
+      "original_title": "A Cyberfeminist Utopia? Perceptions of Gender and Computer Science among Malaysian Women Computer Science Students and Faculty",
+      "duplicate_title": "A Cyberfeminist Utopia? Perceptions of Gender and Computer Science among Malaysian Women Computer Science Students and Faculty: A Survey",
       "mutation_type": "punctuation_and_subtitle_variant"
     },
     {
-      "original_paper_id": "W3145004415",
+      "original_paper_id": "arXiv_2511.20871",
       "duplicate_paper_id": "W_DUP_004",
-      "original_title": "Data Mining and Analysis: Fundamental Concepts and Algorithms",
-      "duplicate_title": "Data Mining and Analysis: Fundamental Concepts and algorithms (Preprint)",
+      "original_title": "A review on data fusion in multimodal learning analytics and educational data mining",
+      "duplicate_title": "A review on data fusion in multimodal learning analytics and educational data mining (Preprint)",
       "mutation_type": "preprint_suffix_and_casing"
     },
     {
-      "original_paper_id": "W3201073812",
+      "original_paper_id": "W2147598330",
       "duplicate_paper_id": "W_DUP_005",
-      "original_title": "LAMMPS - a flexible simulation tool for particle-based materials modeling at the atomic, meso, and continuum scales",
-      "duplicate_title": "LAMMPS   a flexible simulation tool for particle based materials modeling at the atomic, meso, & continuum scales",
+      "original_title": "The role of data mining in pharmacovigilance",
+      "duplicate_title": "An Empirical Study of The role of data mining in pharmacovigilance",
       "mutation_type": "conjunction_and_prefix_variant"
+    },
+    {
+      "original_paper_id": "W2143891888",
+      "duplicate_paper_id": "W_DUP_006",
+      "original_title": "Causality: Models, Reasoning, and Inference",
+      "duplicate_title": "Causality - Models, Reasoning, and Inference",
+      "mutation_type": "punctuation_and_subtitle_variant"
     },
     {
       "original_paper_id": "W1832693441",
-      "duplicate_paper_id": "W_DUP_006",
-      "original_title": "Convolutional Neural Networks for Sentence Classification",
-      "duplicate_title": "Convolutional Neural Networks for Sentence Classification: A Survey",
-      "mutation_type": "punctuation_and_subtitle_variant"
-    },
-    {
-      "original_paper_id": "W3009785512",
       "duplicate_paper_id": "W_DUP_007",
-      "original_title": "Artificial intelligence in oncology",
-      "duplicate_title": "An Empirical Study of Artificial intelligence in oncology",
-      "mutation_type": "conjunction_and_prefix_variant"
+      "original_title": "Convolutional Neural Networks for Sentence Classification",
+      "duplicate_title": "Convolutional Neural Networks for Sentence classification (Preprint)",
+      "mutation_type": "preprint_suffix_and_casing"
     },
     {
-      "original_paper_id": "W2925515791",
+      "original_paper_id": "W4312791778",
       "duplicate_paper_id": "W_DUP_008",
-      "original_title": "Case Study Research and Applications: Design and Methods",
-      "duplicate_title": "Case Study Research & Applications: Design & Methods",
+      "original_title": "What is Artificial Intelligence?",
+      "duplicate_title": "An Empirical Study of What is Artificial Intelligence?",
       "mutation_type": "conjunction_and_prefix_variant"
     },
     {
-      "original_paper_id": "W1485009520",
+      "original_paper_id": "arXiv_1312.3996",
       "duplicate_paper_id": "W_DUP_009",
-      "original_title": "Convolutional LSTM Network: A Machine Learning Approach for Precipitation Nowcasting",
-      "duplicate_title": "Convolutional LSTM Network - A Machine Learning Approach for Precipitation Nowcasting",
+      "original_title": "CANFAR+Skytree: A Cloud Computing and Data Mining System for Astronomy",
+      "duplicate_title": "CANFAR+Skytree - A Cloud Computing and Data Mining System for Astronomy",
       "mutation_type": "punctuation_and_subtitle_variant"
     },
     {
-      "original_paper_id": "W3177828909",
+      "original_paper_id": "W2148698435",
       "duplicate_paper_id": "W_DUP_010",
-      "original_title": "Highly accurate protein structure prediction with AlphaFold",
-      "duplicate_title": "Highly accurate protein structure prediction with alphafold (Preprint)",
+      "original_title": "MrBayes 3.2: Efficient Bayesian Phylogenetic Inference and Model Choice Across a Large Model Space",
+      "duplicate_title": "MrBayes 3.2: Efficient Bayesian Phylogenetic Inference and Model Choice Across a Large Model space (Preprint)",
       "mutation_type": "preprint_suffix_and_casing"
     }
   ],

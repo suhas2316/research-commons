@@ -1,14 +1,17 @@
 """
-Fetch real academic papers from the OpenAlex API (no API key required).
-Queries 6 university department topics, reconstructs abstracts from
-abstract_inverted_index, extracts referenced_works for citation graph
-analytics, and saves raw and normalized JSON datasets.
+Fetch real academic papers from BOTH the OpenAlex API and the arXiv API
+(no API keys required). Queries 6 university department topics, reconstructs
+OpenAlex abstracts from abstract_inverted_index, parses arXiv Atom XML feeds,
+extracts referenced_works for citation graph analytics, and saves raw and
+normalized JSON datasets.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +23,7 @@ RAW_OUTPUT_PATH = BASE_DIR / "data" / "raw" / "papers_raw.json"
 PROCESSED_OUTPUT_PATH = BASE_DIR / "data" / "processed" / "papers.json"
 
 OPENALEX_WORKS_URL = "https://api.openalex.org/works"
+ARXIV_API_URL = "https://export.arxiv.org/api/query"
 HEADERS = {
     "User-Agent": "ResearchCommons/1.0 (mailto:research-commons@chanakyauniversity.edu.in)"
 }
@@ -33,8 +37,25 @@ TOPICS = [
     "machine learning",
 ]
 
-TARGET_MIN_PAPERS = 550
+ARXIV_CATEGORY_MAP = {
+    "cs.AI": "Artificial Intelligence",
+    "cs.LG": "Machine Learning",
+    "cs.CL": "Natural Language Processing",
+    "cs.CV": "Computer Vision",
+    "cs.DB": "Databases",
+    "cs.DC": "Distributed & Cloud Computing",
+    "cs.IR": "Information Retrieval",
+    "cs.SE": "Software Engineering",
+    "cs.NE": "Neural & Evolutionary Computing",
+    "stat.ML": "Statistical Machine Learning",
+    "q-bio.GN": "Genomics",
+    "q-bio.QM": "Quantitative Bioinformatics",
+    "q-bio.BM": "Biomolecules",
+}
+
+TARGET_MIN_OPENALEX = 550
 PER_PAGE = 120
+ARXIV_PER_TOPIC = 35
 
 
 def reconstruct_abstract(inverted_index: dict[str, list[int]] | None) -> str:
@@ -173,19 +194,136 @@ def fetch_topic_works(
     return []
 
 
+def fetch_arxiv_topic(
+    session: requests.Session,
+    topic: str,
+    max_results: int = ARXIV_PER_TOPIC,
+) -> tuple[str, list[dict[str, Any]]]:
+    """Fetch Atom XML entries from arXiv API for a topic."""
+    params = {
+        "search_query": f'all:"{topic}"',
+        "start": 0,
+        "max_results": max_results,
+        "sortBy": "relevance",
+        "sortOrder": "descending",
+    }
+    ns = {
+        "atom": "http://www.w3.org/2005/Atom",
+        "arxiv": "http://arxiv.org/schemas/atom",
+    }
+
+    for attempt in range(3):
+        try:
+            resp = session.get(
+                ARXIV_API_URL,
+                params=params,
+                headers=HEADERS,
+                timeout=30,
+            )
+            if resp.status_code in {429, 503}:
+                time.sleep(3 * (attempt + 1))
+                continue
+            resp.raise_for_status()
+            root = ET.fromstring(resp.text)
+            entries: list[dict[str, Any]] = []
+            for entry in root.findall("atom:entry", ns):
+                raw_id = (entry.findtext("atom:id", default="", namespaces=ns) or "").strip()
+                title = " ".join(
+                    (entry.findtext("atom:title", default="", namespaces=ns) or "").split()
+                )
+                summary = " ".join(
+                    (entry.findtext("atom:summary", default="", namespaces=ns) or "").split()
+                )
+                published = (
+                    entry.findtext("atom:published", default="", namespaces=ns) or ""
+                ).strip()
+                doi = (entry.findtext("arxiv:doi", default="", namespaces=ns) or "").strip() or None
+                authors = [
+                    " ".join((a.findtext("atom:name", default="", namespaces=ns) or "").split())
+                    for a in entry.findall("atom:author", ns)
+                ]
+                authors = [a for a in authors if a]
+                categories = [
+                    c.attrib.get("term", "").strip()
+                    for c in entry.findall("atom:category", ns)
+                    if c.attrib.get("term", "").strip()
+                ]
+                entries.append(
+                    {
+                        "id": raw_id,
+                        "title": title,
+                        "summary": summary,
+                        "published": published,
+                        "doi": doi,
+                        "authors": authors,
+                        "categories": categories,
+                    }
+                )
+            return resp.text, entries
+        except (requests.RequestException, ET.ParseError) as exc:
+            print(f"[WARN] arXiv attempt {attempt + 1} failed for topic='{topic}': {exc}")
+            time.sleep(2.5 * (attempt + 1))
+    return "", []
+
+
+def normalize_arxiv_entry(entry: dict[str, Any], topic: str) -> dict[str, Any] | None:
+    """Normalize a parsed arXiv entry into the Research Commons paper schema."""
+    raw_url = (entry.get("id") or "").strip()
+    title = (entry.get("title") or "").strip()
+    abstract = (entry.get("summary") or "").strip()
+    if not raw_url or not title or not abstract:
+        return None
+
+    arxiv_full = raw_url.rstrip("/").split("/abs/")[-1]
+    arxiv_base = re.sub(r"v\d+$", "", arxiv_full)
+    paper_id = f"arXiv_{arxiv_base}"
+
+    pub_year: int | None = None
+    published = entry.get("published") or ""
+    if len(published) >= 4 and published[:4].isdigit():
+        pub_year = int(published[:4])
+
+    concepts: list[str] = [topic.title()]
+    for cat in entry.get("categories") or []:
+        mapped = ARXIV_CATEGORY_MAP.get(cat, cat)
+        if mapped not in concepts:
+            concepts.append(mapped)
+
+    return {
+        "id": paper_id,
+        "title": title,
+        "abstract": abstract,
+        "authors": entry.get("authors") or [],
+        "doi": clean_doi(entry.get("doi")),
+        "arxiv_id": arxiv_base,
+        "source": "arxiv",
+        "publication_year": pub_year,
+        "citation_count": 0,
+        "concepts": concepts[:10],
+        "department_topic": topic,
+        "referenced_works": [],
+        "url": raw_url,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def main() -> None:
     RAW_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     PROCESSED_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    raw_by_topic: dict[str, list[dict[str, Any]]] = {}
+    openalex_raw_by_topic: dict[str, list[dict[str, Any]]] = {}
+    arxiv_raw_by_topic: dict[str, list[dict[str, Any]]] = {}
     unique_papers: dict[str, dict[str, Any]] = {}
-    raw_records_flat: list[dict[str, Any]] = []
+    seen_arxiv_ids: set[str] = set()
+    seen_dois: set[str] = set()
+    raw_openalex_count = 0
+    raw_arxiv_count = 0
 
     session = requests.Session()
 
+    # 1. Harvest from OpenAlex API
     for topic in TOPICS:
-        print(f"Fetching OpenAlex papers for topic: '{topic}'...")
-        # Fetch page 1 by relevance and page 1 of recent/high-citation works to ensure rich citation overlap
+        print(f"[OpenAlex] Fetching papers for topic: '{topic}'...")
         batch_relevance = fetch_topic_works(session, topic, page=1, per_page=80)
         time.sleep(0.25)
         batch_cited = fetch_topic_works(
@@ -194,40 +332,83 @@ def main() -> None:
         time.sleep(0.25)
 
         combined = batch_relevance + batch_cited
-        raw_by_topic[topic] = combined
+        openalex_raw_by_topic[topic] = combined
+        raw_openalex_count += len(combined)
 
         added_for_topic = 0
         for work in combined:
-            raw_records_flat.append(work)
             normalized = normalize_work(work, topic)
             if normalized and normalized["id"] not in unique_papers:
                 unique_papers[normalized["id"]] = normalized
+                if normalized.get("arxiv_id"):
+                    seen_arxiv_ids.add(re.sub(r"v\d+$", "", str(normalized["arxiv_id"])))
+                if normalized.get("doi"):
+                    seen_dois.add(str(normalized["doi"]).lower())
                 added_for_topic += 1
 
         print(
-            f"  -> Retrieved {len(combined)} raw records, {added_for_topic} new unique papers "
+            f"  -> Retrieved {len(combined)} raw records, {added_for_topic} new unique OpenAlex papers "
             f"(total unique: {len(unique_papers)})"
         )
 
-    # Top up with page 2 if unique count is below TARGET_MIN_PAPERS
+    # Top up OpenAlex if below TARGET_MIN_OPENALEX
     page = 2
-    while len(unique_papers) < TARGET_MIN_PAPERS and page <= 4:
+    while len(unique_papers) < TARGET_MIN_OPENALEX and page <= 4:
         for topic in TOPICS:
-            if len(unique_papers) >= TARGET_MIN_PAPERS:
+            if len(unique_papers) >= TARGET_MIN_OPENALEX:
                 break
             extra = fetch_topic_works(session, topic, page=page, per_page=60)
             time.sleep(0.25)
-            raw_by_topic[topic].extend(extra)
+            openalex_raw_by_topic[topic].extend(extra)
+            raw_openalex_count += len(extra)
             for work in extra:
-                raw_records_flat.append(work)
                 normalized = normalize_work(work, topic)
                 if normalized and normalized["id"] not in unique_papers:
                     unique_papers[normalized["id"]] = normalized
+                    if normalized.get("arxiv_id"):
+                        seen_arxiv_ids.add(re.sub(r"v\d+$", "", str(normalized["arxiv_id"])))
+                    if normalized.get("doi"):
+                        seen_dois.add(str(normalized["doi"]).lower())
         page += 1
+
+    # 2. Harvest from arXiv API
+    for topic in TOPICS:
+        print(f"[arXiv] Fetching preprints for topic: '{topic}'...")
+        _, entries = fetch_arxiv_topic(session, topic, max_results=ARXIV_PER_TOPIC)
+        arxiv_raw_by_topic[topic] = entries
+        raw_arxiv_count += len(entries)
+
+        added_arxiv = 0
+        for entry in entries:
+            normalized = normalize_arxiv_entry(entry, topic)
+            if not normalized:
+                continue
+            aid = str(normalized.get("arxiv_id") or "")
+            doi_lower = str(normalized.get("doi") or "").lower()
+            if (
+                normalized["id"] in unique_papers
+                or (aid and aid in seen_arxiv_ids)
+                or (doi_lower and doi_lower in seen_dois)
+            ):
+                continue
+            unique_papers[normalized["id"]] = normalized
+            if aid:
+                seen_arxiv_ids.add(aid)
+            if doi_lower:
+                seen_dois.add(doi_lower)
+            added_arxiv += 1
+
+        print(
+            f"  -> Retrieved {len(entries)} raw entries, {added_arxiv} new unique arXiv papers "
+            f"(total unique: {len(unique_papers)})"
+        )
+        time.sleep(1.2)
 
     papers_list = list(unique_papers.values())
 
-    # Compute internal citation edges among collected papers for quick inspection
+    # Compute source breakdown & internal citation edges for quick inspection
+    openalex_total = sum(1 for p in papers_list if p["source"] == "openalex")
+    arxiv_total = sum(1 for p in papers_list if p["source"] == "arxiv")
     paper_id_set = set(unique_papers.keys())
     internal_edges = sum(
         1
@@ -239,10 +420,15 @@ def main() -> None:
 
     raw_payload = {
         "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "source": "OpenAlex API",
+        "sources": ["OpenAlex API", "arXiv API"],
         "topics": TOPICS,
-        "total_raw_records": len(raw_records_flat),
-        "results_by_topic": raw_by_topic,
+        "total_raw_records": raw_openalex_count + raw_arxiv_count,
+        "raw_counts_by_source": {
+            "openalex": raw_openalex_count,
+            "arxiv": raw_arxiv_count,
+        },
+        "openalex_results_by_topic": openalex_raw_by_topic,
+        "arxiv_results_by_topic": arxiv_raw_by_topic,
     }
 
     with RAW_OUTPUT_PATH.open("w", encoding="utf-8") as f:
@@ -251,9 +437,9 @@ def main() -> None:
     with PROCESSED_OUTPUT_PATH.open("w", encoding="utf-8") as f:
         json.dump(papers_list, f, indent=2, ensure_ascii=False)
 
-    print("\nPaper harvesting complete!")
-    print(f"  Raw records saved to:       {RAW_OUTPUT_PATH} ({len(raw_records_flat)} records)")
-    print(f"  Processed papers saved to:  {PROCESSED_OUTPUT_PATH} ({len(papers_list)} unique papers)")
+    print("\nMulti-source paper harvesting complete!")
+    print(f"  Raw records saved to:       {RAW_OUTPUT_PATH} ({raw_openalex_count} OpenAlex + {raw_arxiv_count} arXiv)")
+    print(f"  Processed papers saved to:  {PROCESSED_OUTPUT_PATH} ({len(papers_list)} unique: {openalex_total} openalex, {arxiv_total} arxiv)")
     print(f"  Total referenced_works:     {total_refs} (internal edges: {internal_edges})")
 
 
