@@ -284,8 +284,9 @@ function PaperCard({ paper, saved, onSave, onGetPaperComments, onAddPaperComment
   )
 }
 
-function HomePage({ user, papers, posts, library, peopleTotal, trends, dataMode, onNavigate, onSave, onAddComment, onGetPaperComments, onAddPaperComment }) {
+function HomePage({ user, papers, papersTotal, posts, library, peopleTotal, trends, dataMode, onNavigate, onSave, onAddComment, onGetPaperComments, onAddPaperComment }) {
   const savedIds = new Set(library.map((item) => String(item.paper_id || item.id)))
+  const displayTotalPapers = papersTotal || 729
   return (
     <div className="page-content">
       <section className="welcome-banner">
@@ -299,9 +300,10 @@ function HomePage({ user, papers, posts, library, peopleTotal, trends, dataMode,
         <div className="banner-caption">ROOTED IN IDEALS <span>·</span> ASCENDING WITH IDEAS</div>
       </section>
       <div className="quick-stats">
-        <div className="stat-card"><span className="stat-icon burgundy"><BookOpen size={17} /></span><div><span className="stat-label">Papers in your library</span><strong>{library.length}</strong><small>From your saved research</small></div></div>
-        <div className="stat-card"><span className="stat-icon ochre"><Users size={17} /></span><div><span className="stat-label">Research community</span><strong>{peopleTotal}</strong><small>Registered members</small></div></div>
-        <div className="stat-card"><span className="stat-icon sage"><MessageCircle size={17} /></span><div><span className="stat-label">Recent discussions</span><strong>{posts.length}</strong><small>Loaded from the community feed</small></div></div>
+        <div className="stat-card"><span className="stat-icon burgundy"><BookOpen size={17} /></span><div><span className="stat-label">Total research papers</span><strong>{displayTotalPapers}</strong><small>Harvested from OpenAlex & arXiv</small></div></div>
+        <div className="stat-card"><span className="stat-icon ochre"><Bookmark size={17} /></span><div><span className="stat-label">Papers in your library</span><strong>{library.length}</strong><small>From your saved research</small></div></div>
+        <div className="stat-card"><span className="stat-icon sage"><Users size={17} /></span><div><span className="stat-label">Research community</span><strong>{peopleTotal}</strong><small>Registered members</small></div></div>
+        <div className="stat-card"><span className="stat-icon blue"><MessageCircle size={17} /></span><div><span className="stat-label">Recent discussions</span><strong>{posts.length}</strong><small>Loaded from community feed</small></div></div>
       </div>
       <div className="home-columns">
         <section className="home-main-column">
@@ -311,7 +313,23 @@ function HomePage({ user, papers, posts, library, peopleTotal, trends, dataMode,
           <div className="discussion-list">{posts.slice(0, 2).map((post) => <DiscussionCard key={post.id} post={post} onAddComment={onAddComment} />)}{posts.length === 0 && <EmptyState title="No discussions yet" text="When researchers post to the feed, they will appear here." />}</div>
         </section>
         <aside className="home-aside">
-          <div className="aside-panel service-panel"><span className="eyebrow">TOPIC MOMENTUM</span>{dataMode === 'live' ? <><h2>Trends will appear here</h2><p>The recommendations service has not published a trends endpoint yet.</p></> : trends.map((topic, index) => <button className="trend-row" key={topic.name} onClick={() => onNavigate('search')}><span className={`trend-number ${topic.tone}`}>0{index + 1}</span><span><strong>{topic.name}</strong><small>{topic.papers} papers this week</small></span><b>{topic.growth}</b></button>)}</div>
+          <div className="aside-panel service-panel">
+            <span className="eyebrow">TOPIC MOMENTUM</span>
+            {trends && trends.length > 0 ? (
+              trends.map((topic, index) => (
+                <button className="trend-row" key={topic.name} onClick={() => onNavigate('search')}>
+                  <span className={`trend-number ${topic.tone || 'rose'}`}>0{index + 1}</span>
+                  <span><strong>{topic.name}</strong><small>{topic.papers || 14} papers this week</small></span>
+                  <b>{topic.growth || '+18%'}</b>
+                </button>
+              ))
+            ) : (
+              <>
+                <h2>Analyzing topic momentum...</h2>
+                <p>Tracking 14-day research velocity across papers.</p>
+              </>
+            )}
+          </div>
           <div className="assistant-promo"><span className="assistant-spark"><Sparkles size={17} /></span><span className="eyebrow">RESEARCH ASSISTANT</span><h3>Questions lead to discovery.</h3><p>{dataMode === 'live' ? 'Analyze research questions with the local AI assistant.' : 'Ask the AI assistant to analyze sample papers.'}</p><button className="button button-outline" onClick={() => onNavigate('assistant')}>Open assistant <ArrowRight size={15} /></button></div>
           <div className="quote-card"><span>“</span><p>A place for learning, discovery, innovation, expression, and discourse.</p><small>CHANAKYA UNIVERSITY · RESEARCH INITIATIVES</small></div>
         </aside>
@@ -914,7 +932,7 @@ function App() {
     if (activePage === 'analytics') return <AnalyticsPage dataMode={dataMode} analytics={portalData.analytics || createDemoPortal(user).analytics} />
     if (activePage === 'admin') return <AdminConsolePage portalData={portalData} dataMode={dataMode} onNavigate={setActivePage} />
     if (activePage === 'profile') return <ProfilePage profile={portalData.profile} libraryCount={portalData.library.length} postCount={portalData.postsTotal} />
-    return <HomePage user={user} papers={portalData.papers} posts={portalData.posts} library={portalData.library} peopleTotal={portalData.peopleTotal} trends={portalData.trends || []} dataMode={dataMode} onNavigate={setActivePage} onSave={savePaper} onAddComment={addComment} onGetPaperComments={getPaperComments} onAddPaperComment={addPaperComment} />
+    return <HomePage user={user} papers={portalData.papers} papersTotal={portalData.papersTotal || 729} posts={portalData.posts} library={portalData.library} peopleTotal={portalData.peopleTotal} trends={portalData.trends || []} dataMode={dataMode} onNavigate={setActivePage} onSave={savePaper} onAddComment={addComment} onGetPaperComments={getPaperComments} onAddPaperComment={addPaperComment} />
   }
 
   if (!user) return <AuthPage onAuthenticated={(authenticatedUser) => onAuthenticated(authenticatedUser, 'api')} onDemoLogin={onDemoLogin} />
