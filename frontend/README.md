@@ -1,6 +1,6 @@
-# Research Commons frontend
+# Wiz-Search Sphere frontend
 
-The Research Commons frontend is the React + Vite client for the Chanakya University research community. Its visual theme uses deep maroon, antique gold, and warm neutrals.
+Wiz-Search Sphere is the React + Vite client for the Chanakya University research community. Its visual theme uses deep maroon, antique gold, and warm neutrals.
 
 ## Run locally
 
@@ -33,10 +33,12 @@ The frontend environment file should set `VITE_API_BASE_URL=http://localhost:800
 
 - **Sign in / registration:** connects to the FastAPI login and registration endpoints. Account registration includes role and department.
 - **Community feed:** browses posts, creates posts with tags, and adds comments.
-- **Personal library:** saves papers and edits collection names and private notes.
+- **Personal library:** saves papers, edits collection names and private notes, and surfaces unsaved recommendations to grow a reading list.
+- **Research discussions:** comments attach directly to papers and theses, in addition to feed-post comments. In demo mode, comments remain in browser memory.
 - **Unified search:** searches papers, library items, university members, and discussions across the data loaded by the API.
 - **Research assistant:** sends questions and recent conversation turns to the local Ollama model through FastAPI. The backend ranks relevant paper abstracts as context and returns expandable citations. Demo Student and Faculty accounts can use it too; their sample papers are supplied as context. If Ollama is unavailable, the UI reports the error rather than showing a fabricated answer.
-- **Admin analytics:** offline/demo mode displays department activity, six-month trends, and collaboration charts. A live analytics API is not yet available.
+- **Admin console:** administrator-role accounts see campus totals and connected anomaly-review signals. Automated flags are review prompts, not proof of misconduct.
+- **Research analytics:** interactive six-month activity, department, collaboration, topic, and top-paper views. In connected mode these charts use PostgreSQL aggregates; demo numbers are marked as illustrative.
 
 The demo/offline records are illustrative and are not saved to the backend. Assistant prompts and selected paper abstracts are sent only to the local Ollama service; no external AI provider is used. In connected mode, search filters records returned by the API; it is not wired to the team's BM25/semantic unified-search endpoint.
 

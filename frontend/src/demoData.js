@@ -87,18 +87,18 @@ const trends = [
 
 const analytics = {
   monthlyActivity: [
-    { month: 'Jun', papers: 24, discussions: 12 },
-    { month: 'Jul', papers: 31, discussions: 18 },
-    { month: 'Aug', papers: 28, discussions: 21 },
-    { month: 'Sep', papers: 43, discussions: 26 },
-    { month: 'Oct', papers: 38, discussions: 31 },
-    { month: 'Nov', papers: 52, discussions: 37 },
+    { month: 'Jun', papers: 24, searches: 12 },
+    { month: 'Jul', papers: 31, searches: 18 },
+    { month: 'Aug', papers: 28, searches: 21 },
+    { month: 'Sep', papers: 43, searches: 26 },
+    { month: 'Oct', papers: 38, searches: 31 },
+    { month: 'Nov', papers: 52, searches: 37 },
   ],
   departmentActivity: [
-    { name: 'Engineering', activity: 34 },
-    { name: 'Arts & Humanities', activity: 26 },
-    { name: 'Management', activity: 22 },
-    { name: 'Biosciences', activity: 18 },
+    { name: 'Engineering', activity: 123, share: 34 },
+    { name: 'Arts & Humanities', activity: 94, share: 26 },
+    { name: 'Management', activity: 79, share: 22 },
+    { name: 'Biosciences', activity: 65, share: 18 },
   ],
   collaborations: [
     { name: 'Engineering + Humanities', value: 38 },
@@ -113,6 +113,7 @@ export function createDemoPortal(user) {
     papers: structuredClone(papers),
     posts: structuredClone(posts),
     library: structuredClone(library),
+    paperComments: {},
     people: structuredClone(people),
     peopleTotal: 1284,
     postsTotal: posts.length,

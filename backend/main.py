@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -26,13 +27,14 @@ from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import SQLAlchemyError
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 BACKEND_DIR = Path(__file__).resolve().parent
 PAPERS_JSON_PATH = BASE_DIR / "data" / "processed" / "papers.json"
 SYNTHETIC_JSON_PATH = BASE_DIR / "data" / "synthetic" / "synthetic_data.json"
+logger = logging.getLogger(__name__)
 
 
 def _load_env() -> None:
@@ -105,6 +107,11 @@ class CommentCreateRequest(BaseModel):
     content: str = Field(..., min_length=1)
 
 
+class PaperCommentCreateRequest(BaseModel):
+    user_id: int
+    content: str = Field(..., min_length=1, max_length=5000)
+
+
 class LibrarySaveRequest(BaseModel):
     user_id: int
     paper_id: str
@@ -150,6 +157,7 @@ class DataStore:
         self.library: list[dict[str, Any]] = []
         self.posts: list[dict[str, Any]] = []
         self.comments: list[dict[str, Any]] = []
+        self.paper_comments: list[dict[str, Any]] = []
         self.activity_events: list[dict[str, Any]] = []
 
         self.users_by_id: dict[int, dict[str, Any]] = {}
@@ -165,8 +173,11 @@ class DataStore:
 
     def _try_connect_postgres(self) -> bool:
         try:
+            engine_url = make_url(DATABASE_URL)
+            if engine_url.drivername == "postgresql":
+                engine_url = engine_url.set(drivername="postgresql+psycopg2")
             engine = create_engine(
-                DATABASE_URL,
+                engine_url,
                 pool_pre_ping=True,
                 connect_args={"connect_timeout": 2},
             )
@@ -180,10 +191,29 @@ class DataStore:
                     )
                 ).scalar()
                 if not result:
+                    logger.warning("PostgreSQL schema is incomplete; using JSON fallback.")
                     return False
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS paper_comments ("
+                        "id SERIAL PRIMARY KEY, "
+                        "paper_id VARCHAR(128) NOT NULL REFERENCES papers(id) ON DELETE CASCADE, "
+                        "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+                        "content TEXT NOT NULL, "
+                        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_paper_comments_paper_id "
+                        "ON paper_comments (paper_id, created_at)"
+                    )
+                )
             self.engine = engine
             return True
-        except Exception:
+        except (ImportError, SQLAlchemyError) as error:
+            logger.warning("PostgreSQL connection failed; using JSON fallback: %s", error)
             return False
 
     def _load_json_fallback(self) -> None:
@@ -207,6 +237,7 @@ class DataStore:
             self.library = syn.get("library", [])
             self.posts = syn.get("posts", [])
             self.comments = syn.get("comments", [])
+            self.paper_comments = syn.get("paper_comments", [])
             self.activity_events = syn.get("activity_events", [])
         else:
             self.users = []
@@ -215,6 +246,7 @@ class DataStore:
             self.library = []
             self.posts = []
             self.comments = []
+            self.paper_comments = []
             self.activity_events = []
 
         self._rebuild_indexes()
@@ -268,6 +300,7 @@ def health_check() -> dict[str, Any]:
                     "papers": conn.execute(text("SELECT COUNT(*) FROM papers")).scalar() or 0,
                     "posts": conn.execute(text("SELECT COUNT(*) FROM posts")).scalar() or 0,
                     "comments": conn.execute(text("SELECT COUNT(*) FROM comments")).scalar() or 0,
+                    "paper_comments": conn.execute(text("SELECT COUNT(*) FROM paper_comments")).scalar() or 0,
                     "library": conn.execute(text("SELECT COUNT(*) FROM library")).scalar() or 0,
                     "activity_events": conn.execute(text("SELECT COUNT(*) FROM activity_events")).scalar() or 0,
                 }
@@ -291,6 +324,7 @@ def health_check() -> dict[str, Any]:
             "papers": len(store.papers),
             "posts": len(store.posts),
             "comments": len(store.comments),
+            "paper_comments": len(store.paper_comments),
             "library": len(store.library),
             "activity_events": len(store.activity_events),
         },
@@ -689,6 +723,124 @@ def get_paper(paper_id: str) -> dict[str, Any]:
     return enriched
 
 
+@app.get("/api/papers/{paper_id}/comments", tags=["Paper discussions"])
+def get_paper_comments(
+    paper_id: str,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            if not conn.execute(
+                text("SELECT id FROM papers WHERE id = :pid"), {"pid": paper_id}
+            ).first():
+                raise HTTPException(status_code=404, detail="Paper not found")
+            total = conn.execute(
+                text("SELECT COUNT(*) FROM paper_comments WHERE paper_id = :pid"),
+                {"pid": paper_id},
+            ).scalar() or 0
+            rows = conn.execute(
+                text(
+                    "SELECT c.id, c.paper_id, c.user_id, c.content, c.created_at, "
+                    "u.name AS author_name, u.department AS author_department, u.role AS author_role "
+                    "FROM paper_comments c JOIN users u ON u.id = c.user_id "
+                    "WHERE c.paper_id = :pid ORDER BY c.created_at ASC "
+                    "LIMIT :limit OFFSET :offset"
+                ),
+                {"pid": paper_id, "limit": limit, "offset": offset},
+            ).mappings().all()
+            comments: list[dict[str, Any]] = []
+            for row in rows:
+                comment = dict(row)
+                if hasattr(comment.get("created_at"), "isoformat"):
+                    comment["created_at"] = comment["created_at"].isoformat()
+                comments.append(comment)
+            return {"paper_id": paper_id, "total": total, "comments": comments}
+
+    if paper_id not in store.papers_by_id:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    matching: list[dict[str, Any]] = [
+        comment for comment in store.paper_comments
+        if str(comment.get("paper_id")) == paper_id
+    ]
+    matching.sort(key=lambda comment: comment.get("created_at", ""))
+    comments: list[dict[str, Any]] = []
+    for comment in matching[offset : offset + limit]:
+        author = store.users_by_id.get(int(comment["user_id"]), {})
+        comments.append({
+            **comment,
+            "author_name": author.get("name", "Researcher"),
+            "author_department": author.get("department", ""),
+            "author_role": author.get("role", ""),
+        })
+    return {"paper_id": paper_id, "total": len(matching), "comments": comments}
+
+
+@app.post(
+    "/api/papers/{paper_id}/comments",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Paper discussions"],
+)
+def add_paper_comment(
+    paper_id: str,
+    payload: PaperCommentCreateRequest,
+) -> dict[str, Any]:
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="Comment content cannot be empty")
+
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.begin() as conn:
+            if not conn.execute(
+                text("SELECT id FROM papers WHERE id = :pid"), {"pid": paper_id}
+            ).first():
+                raise HTTPException(status_code=404, detail="Paper not found")
+            user = conn.execute(
+                text("SELECT id, name, department, role FROM users WHERE id = :uid"),
+                {"uid": payload.user_id},
+            ).mappings().first()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            row = conn.execute(
+                text(
+                    "INSERT INTO paper_comments (paper_id, user_id, content) "
+                    "VALUES (:pid, :uid, :content) "
+                    "RETURNING id, paper_id, user_id, content, created_at"
+                ),
+                {"pid": paper_id, "uid": payload.user_id, "content": content},
+            ).mappings().first()
+            if row is None:
+                raise HTTPException(status_code=500, detail="Paper comment could not be created")
+            comment: dict[str, Any] = dict(row)
+            comment.update({
+                "author_name": user["name"],
+                "author_department": user["department"],
+                "author_role": user["role"],
+            })
+            if hasattr(comment.get("created_at"), "isoformat"):
+                comment["created_at"] = comment["created_at"].isoformat()
+            return {"message": "Paper comment added", "comment": comment}
+
+    with store.lock:
+        if paper_id not in store.papers_by_id:
+            raise HTTPException(status_code=404, detail="Paper not found")
+        author = store.users_by_id.get(payload.user_id)
+        if not author:
+            raise HTTPException(status_code=404, detail="User not found")
+        comment: dict[str, Any] = {
+            "id": max((int(item["id"]) for item in store.paper_comments), default=0) + 1,
+            "paper_id": paper_id,
+            "user_id": payload.user_id,
+            "content": content,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "author_name": author.get("name", "Researcher"),
+            "author_department": author.get("department", ""),
+            "author_role": author.get("role", ""),
+        }
+        store.paper_comments.append(comment)
+    return {"message": "Paper comment added", "comment": comment}
+
+
 # ============================================================
 # Local AI Research Assistant
 # ============================================================
@@ -752,7 +904,7 @@ def chat_with_research_assistant(payload: AssistantChatRequest) -> dict[str, Any
         source_context = "No relevant paper abstracts were found in the supplied research collection."
 
     system_prompt = (
-        "You are the Research Commons AI, an intellectually rigorous research assistant for "
+        "You are the Wiz-Search Sphere AI, an intellectually rigorous research assistant for "
         "university students and faculty. Analyze the question, explain concepts clearly, "
         "surface assumptions or limitations, and suggest useful next steps when relevant. "
         "Use concise headings or bullets when they improve clarity; keep the default answer "
@@ -1381,8 +1533,22 @@ def get_top_pagerank_papers(top_k: int = Query(10, ge=1, le=50)):
 
 
 @app.get("/api/analytics/topics", tags=["Analytics"])
-def get_analytics_topics():
+def get_analytics_topics() -> list[dict[str, Any]]:
     """F9: Active research topics by department."""
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT COALESCE(NULLIF(u.department, ''), 'Unassigned') AS department, "
+                    "COUNT(*)::int AS interaction_count "
+                    "FROM activity_events a JOIN users u ON u.id = a.user_id "
+                    "GROUP BY u.department ORDER BY interaction_count DESC"
+                )
+            ).mappings().all()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                items.append(dict(row))
+            return items
     engine = get_analytics_engine()
     if engine is not None:
         return engine.get_research_topics_by_department()
@@ -1390,8 +1556,28 @@ def get_analytics_topics():
 
 
 @app.get("/api/analytics/collaboration", tags=["Analytics"])
-def get_analytics_collaboration():
+def get_analytics_collaboration() -> list[dict[str, Any]]:
     """F9: Inter-department collaboration matrix."""
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT CONCAT(LEAST(a.department, b.department), ' + ', "
+                    "GREATEST(a.department, b.department)) AS researcher_department, "
+                    "'Research network' AS topic_area, COUNT(*)::int AS engagement_volume "
+                    "FROM follows f "
+                    "JOIN users a ON a.id = f.follower_id "
+                    "JOIN users b ON b.id = f.following_id "
+                    "WHERE a.department IS NOT NULL AND b.department IS NOT NULL "
+                    "AND a.department <> b.department "
+                    "GROUP BY LEAST(a.department, b.department), GREATEST(a.department, b.department) "
+                    "ORDER BY engagement_volume DESC LIMIT 10"
+                )
+            ).mappings().all()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                items.append(dict(row))
+            return items
     engine = get_analytics_engine()
     if engine is not None:
         return engine.get_department_collaboration_matrix()
@@ -1399,8 +1585,37 @@ def get_analytics_collaboration():
 
 
 @app.get("/api/analytics/top-papers", tags=["Analytics"])
-def get_analytics_top_papers(top_n: int = Query(10, ge=1, le=50)):
+def get_analytics_top_papers(top_n: int = Query(10, ge=1, le=50)) -> list[dict[str, Any]]:
     """F9: Most saved and discussed papers."""
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "WITH saved AS ("
+                    "SELECT paper_id, COUNT(*)::int AS save_count FROM library GROUP BY paper_id"
+                    "), discussed AS ("
+                    "SELECT attached_paper_id AS paper_id, COUNT(*)::int AS discussion_count "
+                    "FROM posts WHERE attached_paper_id IS NOT NULL GROUP BY attached_paper_id"
+                    "), paper_comments_count AS ("
+                    "SELECT paper_id, COUNT(*)::int AS comment_count "
+                    "FROM paper_comments GROUP BY paper_id"
+                    ") "
+                    "SELECT p.id, p.title, COALESCE(s.save_count, 0)::int AS save_count, "
+                    "COALESCE(d.discussion_count, 0)::int AS discussion_count, "
+                    "COALESCE(pc.comment_count, 0)::int AS comment_count "
+                    "FROM papers p LEFT JOIN saved s ON s.paper_id = p.id "
+                    "LEFT JOIN discussed d ON d.paper_id = p.id "
+                    "LEFT JOIN paper_comments_count pc ON pc.paper_id = p.id "
+                    "ORDER BY save_count DESC, "
+                    "COALESCE(d.discussion_count, 0) + COALESCE(pc.comment_count, 0) DESC, "
+                    "p.citation_count DESC LIMIT :top_n"
+                ),
+                {"top_n": top_n},
+            ).mappings().all()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                items.append(dict(row))
+            return items
     engine = get_analytics_engine()
     if engine is not None:
         return engine.get_most_saved_and_discussed_papers(top_n=top_n)
@@ -1408,8 +1623,34 @@ def get_analytics_top_papers(top_n: int = Query(10, ge=1, le=50)):
 
 
 @app.get("/api/analytics/trends", tags=["Analytics"])
-def get_analytics_trends():
+def get_analytics_trends() -> list[dict[str, Any]]:
     """F9: Six-month campus interaction trends (views, saves, searches)."""
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "WITH bounds AS ("
+                    "SELECT date_trunc('month', COALESCE(MAX(timestamp), NOW())) "
+                    "- INTERVAL '5 months' AS start_month FROM activity_events"
+                    "), months AS ("
+                    "SELECT generate_series(start_month, start_month + INTERVAL '5 months', "
+                    "INTERVAL '1 month') AS month_start FROM bounds"
+                    "), event_types AS ("
+                    "SELECT unnest(ARRAY['view', 'save', 'search']) AS event_type"
+                    ") "
+                    "SELECT to_char(m.month_start, 'YYYY-MM') AS year_month, "
+                    "et.event_type, COUNT(a.id)::int AS total_events "
+                    "FROM months m CROSS JOIN event_types et "
+                    "LEFT JOIN activity_events a ON a.event_type = et.event_type "
+                    "AND a.timestamp >= m.month_start "
+                    "AND a.timestamp < m.month_start + INTERVAL '1 month' "
+                    "GROUP BY m.month_start, et.event_type ORDER BY m.month_start, et.event_type"
+                )
+            ).mappings().all()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                items.append(dict(row))
+            return items
     engine = get_analytics_engine()
     if engine is not None:
         return engine.get_engagement_trends_over_time()
@@ -1417,11 +1658,46 @@ def get_analytics_trends():
 
 
 @app.get("/api/analytics/topic-clusters", tags=["Analytics"])
-def get_analytics_topic_clusters(k: int = Query(4, ge=2, le=8)):
-    """F9: Hierarchical clustering of research topics using Agglomerative Linkage."""
+def get_analytics_topic_clusters(k: int = Query(4, ge=2, le=8)) -> dict[str, Any]:
+    """F9: Most represented research concepts in the loaded corpus."""
+    if store.mode == "postgresql" and store.engine is not None:
+        with store.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "WITH expanded AS ("
+                    "SELECT p.id AS paper_id, "
+                    "CASE WHEN jsonb_typeof(c.value) = 'object' "
+                    "THEN COALESCE(c.value->>'display_name', c.value->>'name') "
+                    "ELSE c.value #>> '{}' END AS topic "
+                    "FROM papers p CROSS JOIN LATERAL jsonb_array_elements(p.concepts) AS c(value)"
+                    ") "
+                    "SELECT topic, COUNT(DISTINCT paper_id)::int AS paper_volume "
+                    "FROM expanded WHERE topic IS NOT NULL AND topic <> '' "
+                    "GROUP BY topic ORDER BY paper_volume DESC, topic LIMIT :limit"
+                ),
+                {"limit": k},
+            ).mappings().all()
+            topics: list[dict[str, Any]] = [
+                {
+                    "cluster_id": index,
+                    "name": row["topic"],
+                    "paper_volume": row["paper_volume"],
+                    "topics": [row["topic"]],
+                }
+                for index, row in enumerate(rows, start=1)
+            ]
+            return {"total_topics": len(topics), "clusters": topics}
     engine = get_analytics_engine()
     if engine is not None:
-        return engine.get_topic_hierarchical_clustering(papers=store.papers, k_clusters=k)
+        result = engine.get_topic_hierarchical_clustering(
+            papers=store.papers,
+            k_clusters=k,
+        )
+        if isinstance(result, dict) and isinstance(result.get("clusters"), list):
+            return {
+                "total_topics": int(result.get("total_topics", len(result["clusters"]))),
+                "clusters": result["clusters"],
+            }
     return {"total_topics": 0, "clusters": []}
 
 

@@ -133,6 +133,17 @@ CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments (post_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments (user_id);
 CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments (created_at);
 
+CREATE TABLE IF NOT EXISTS paper_comments (
+    id              SERIAL PRIMARY KEY,
+    paper_id        VARCHAR(128) NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content         TEXT NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_paper_comments_paper_id
+    ON paper_comments (paper_id, created_at);
+
 -- ============================================================
 -- 5. ACTIVITY EVENTS (TRENDS, SPAM DETECTION & OLAP ANALYTICS)
 -- ============================================================
