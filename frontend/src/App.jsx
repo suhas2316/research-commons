@@ -145,7 +145,7 @@ function BrandLogo({ className = '' }) {
 }
 
 function PortalHeader({ activePage, onNavigate, onSignOut, user }) {
-  const visibleNavigation = navigation.filter((item) => !item.adminOnly || user.role === 'admin')
+  const visibleNavigation = navigation
   return (
     <header className="portal-header">
       <div className="portal-brand-row">
@@ -911,8 +911,8 @@ function App() {
     if (activePage === 'search') return <SearchPage papers={portalData.papers} papersTotal={portalData.papersTotal || portalData.papers.length} library={portalData.library} people={portalData.people} posts={portalData.posts} dataMode={dataMode} onSave={savePaper} onAddComment={addComment} onGetPaperComments={getPaperComments} onAddPaperComment={addPaperComment} onLoadMorePapers={loadMorePapers} />
     if (activePage === 'library') return <LibraryPage library={portalData.library} papers={portalData.papers} onNavigate={setActivePage} onSave={savePaper} onGetPaperComments={getPaperComments} onAddPaperComment={addPaperComment} />
     if (activePage === 'assistant') return <AssistantPage papers={portalData.papers} />
-    if (activePage === 'analytics' && user.role === 'admin') return <AnalyticsPage dataMode={dataMode} analytics={portalData.analytics || createDemoPortal(user).analytics} />
-    if (activePage === 'admin' && user.role === 'admin') return <AdminConsolePage portalData={portalData} dataMode={dataMode} onNavigate={setActivePage} />
+    if (activePage === 'analytics') return <AnalyticsPage dataMode={dataMode} analytics={portalData.analytics || createDemoPortal(user).analytics} />
+    if (activePage === 'admin') return <AdminConsolePage portalData={portalData} dataMode={dataMode} onNavigate={setActivePage} />
     if (activePage === 'profile') return <ProfilePage profile={portalData.profile} libraryCount={portalData.library.length} postCount={portalData.postsTotal} />
     return <HomePage user={user} papers={portalData.papers} posts={portalData.posts} library={portalData.library} peopleTotal={portalData.peopleTotal} trends={portalData.trends || []} dataMode={dataMode} onNavigate={setActivePage} onSave={savePaper} onAddComment={addComment} onGetPaperComments={getPaperComments} onAddPaperComment={addPaperComment} />
   }
