@@ -518,7 +518,7 @@ function AssistantPage({ papers }) {
           papers: papers.slice(0, 50).map((paper) => ({
             id: String(paper.id),
             title: paper.title,
-            authors: paper.authors || '',
+            authors: (paper.authors || '').slice(0, 500),
             year: paper.year || '',
             abstract: (paper.abstract || '').slice(0, 4000),
             tags: Array.isArray(paper.tags) ? paper.tags.slice(0, 20) : [],
